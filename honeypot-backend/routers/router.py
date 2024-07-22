@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from schemas.schemas import UserCreate, User, PostCreate, Post, LoginRequest
 from services.crud import create_user, create_post, get_users, check_login, get_posts, get_user_by_id, check_token
 from config.database import get_db, test_connection, create_tables
+import logging
 
 test_connection()
 create_tables()
 
 router = APIRouter()
-
 
 @router.get("/")
 async def root():
@@ -66,10 +67,20 @@ async def create_post_endpoint(post: PostCreate, db: Session = Depends(get_db)):
     post.author_id = str(post.author_id)
     return post
 
-
 @router.post("/api/handle-packet")
-async def handle_packet(request: Request):
+async def handle_packet(request: Request, db: Session = Depends(get_db)):
     payload = await request.body()
-    # Process the packet payload
-    response = f"Processed by honeypot server: {payload.decode()}"
-    return response
+    query = payload.decode()
+    logging.info(f"Received query: {query}")
+    try:
+        result = db.execute(text(query))  
+        db.commit()
+        if query.strip().lower().startswith("select"):
+            result = result.fetchall()
+        else:
+            result = "Query executed successfully"
+        return {"response": result}
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Failed to execute query: {e}")
+        return {"error": str(e)}
