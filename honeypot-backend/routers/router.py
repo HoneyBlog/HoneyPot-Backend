@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from schemas.schemas import UserCreate, User, PostCreate, Post, LoginRequest
 from services.crud import create_user, create_post, get_users, check_login, get_posts, get_user_by_id, check_token
 from config.database import get_db, test_connection, create_tables
-import logging
 
 test_connection()
 create_tables()
@@ -25,13 +23,13 @@ async def get_users_endpoint(db: Session = Depends(get_db)):
 
 @router.get("/api/users/{user_id}", response_model=User)
 async def get_user_by_id_endpoint(user_id: str, db: Session = Depends(get_db)):
-        try:
-            user = get_user_by_id(db, user_id)
-            user.id = str(user.id)
-            return user
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        
+    user = get_user_by_id(db, user_id)
+    if user:
+        user_dict = dict(user)
+        user_dict['id'] = str(user_dict['id'])
+        return user_dict
+    raise HTTPException(status_code=404, detail="User not found")
+
 @router.post("/api/users/", response_model=User)
 async def create_user_endpoint(user: UserCreate, db: Session = Depends(get_db)):
     user = create_user(db, user)
@@ -42,8 +40,7 @@ async def create_user_endpoint(user: UserCreate, db: Session = Depends(get_db)):
 async def login(login_request: LoginRequest, db: Session = Depends(get_db)):
     try:
         token, user_id = check_login(db, login_request.username, login_request.password)
-        return {"token": token,"user_id": user_id}  # Assuming 'user' is the JWT token
-
+        return {"token": token, "user_id": user_id}
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
 
@@ -68,19 +65,8 @@ async def create_post_endpoint(post: PostCreate, db: Session = Depends(get_db)):
     return post
 
 @router.post("/api/handle-packet")
-async def handle_packet(request: Request, db: Session = Depends(get_db)):
+async def handle_packet(request: Request):
     payload = await request.body()
-    query = payload.decode()
-    logging.info(f"Received query: {query}")
-    try:
-        result = db.execute(text(query))  
-        db.commit()
-        if query.strip().lower().startswith("select"):
-            result = result.fetchall()
-        else:
-            result = "Query executed successfully"
-        return {"response": result}
-    except Exception as e:
-        db.rollback()
-        logging.error(f"Failed to execute query: {e}")
-        return {"error": str(e)}
+    # Process the packet payload
+    response = f"Processed by honeypot server: {payload.decode()}"
+    return response
